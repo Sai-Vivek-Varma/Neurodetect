@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+gunicorn
+pymongo[srv]
+ultralytics
+torch
+torchvision
+opencv-python-headless
+python-multipart

@@ -1,0 +1,7 @@
+path: /kaggle/input/datasets/gollasaivivek/brain-tumor/dataset
+train: images/train
+val: images/val
+test: images/test
+
+nc: 3
+names: ['glioma', 'meningioma', 'pituitary']

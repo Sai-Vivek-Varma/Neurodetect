@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: scc-yolo-backend
+    env: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: gunicorn -k uvicorn.workers.UvicornWorker backend.main:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: MONGODB_URI
+        sync: false # Set this in Render Dashboard
+      - key: APP_MODULE
+        value: backend.main:app
+    healthCheckPath: /api/history
