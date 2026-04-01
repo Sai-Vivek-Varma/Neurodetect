@@ -35,7 +35,7 @@ const Chatbot = () => {
         setMessages((prev: any) => [...prev, { sender: 'bot', text: res.data.response }]);
         setIsTyping(false);
       }, 600);
-    } catch (err) {
+    } catch (_) {
       setMessages((prev: any) => [...prev, { sender: 'bot', text: "I'm having trouble connecting to the medical intelligence server. Please try again later." }]);
       setIsTyping(false);
     }

@@ -1,5 +1,4 @@
-import React from 'react';
-import { AlertCircle, FileStack } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 interface Prediction {
   class_name: string;
