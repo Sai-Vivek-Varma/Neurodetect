@@ -1,38 +1,50 @@
+import os
 import json
+from google import genai
 from backend.database import get_db
+from dotenv import load_dotenv
+
+env_path = os.path.join(os.path.dirname(__file__), '.env')
+load_dotenv(env_path, override=True)
+
+# Configure Gemini
+api_key = os.getenv("GEMINI_API_KEY")
+if api_key:
+    client = genai.Client(api_key=api_key)
+else:
+    client = None
 
 class ChatService:
     def __init__(self):
-        self.knowledge_base = {
-            "scconv": "Spatial and Channel Reconstruction Convolution (SCConv) is our key enhancement. It suppresses spatial redundancy (SRU) and channel redundancy (CRU) within the YOLO head, forcing the model to focus strictly on tumor-relevant feature maps.",
-            "yolov8": "We use a customized YOLOv8-Nano backbone for real-time performance. By injecting SCConv modules into the C2f blocks, we achieve higher mean Average Precision (mAP) with fewer parameters.",
-            "tumors": "This diagnostic system is specialized for Glioma, Meningioma, and Pituitary tumors. It classifies based on Morphological features captured in MRI T1/T2 weighted slices.",
-            "disclaimer": "This tool is intended for research and educational purposes. Always consult a certified neurologist or radiologist for clinical diagnosis.",
-            "mission": "Our goal is to provide a viewport-locked, high-fidelity dashboard that demonstrates how advanced convolution techniques can improve the accuracy of automated MRI segmentation."
-        }
+        self.system_prompt = """
+You are the AI assistant for the NeuroDetect dashboard.
+Rules:
+1. Keep responses extremely brief and conversational (1-2 sentences max). No fluff.
+2. Get straight to the point. Do not give a long welcome message or repeat the dashboard description unless asked.
+3. Only provide a medical disclaimer ("consult a radiologist") IF the user explicitly asks for medical diagnosis or advice.
+4. If asked about stats, give the numbers directly.
+"""
 
     def get_db_stats(self):
-        """Query the database for real-time history statistics."""
+        """Query the MongoDB database for real-time history statistics."""
         try:
-            conn = get_db()
-            cursor = conn.cursor()
-            cursor.execute('SELECT predictions FROM predictions')
-            rows = cursor.fetchall()
-            conn.close()
-
-            total_scans = len(rows)
+            collection = get_db()
+            # Fetch all documents, but only return the 'predictions' field to save memory
+            cursor = collection.find({}, {"predictions": 1})
+            
+            total_scans = 0
             gliomas = 0
             meningiomas = 0
             pituitary = 0
             
-            for row in rows:
-                if row['predictions']:
-                    preds = json.loads(row['predictions'])
-                    for p in preds:
-                        name = p.get('class_name', '').lower()
-                        if 'glioma' in name: gliomas += 1
-                        elif 'meningioma' in name: meningiomas += 1
-                        elif 'pituitary' in name: pituitary += 1
+            for row in cursor:
+                total_scans += 1
+                preds = row.get('predictions', [])
+                for p in preds:
+                    name = p.get('class_name', '').lower()
+                    if 'glioma' in name: gliomas += 1
+                    elif 'meningioma' in name: meningiomas += 1
+                    elif 'pituitary' in name: pituitary += 1
             
             return {
                 "total": total_scans,
@@ -45,39 +57,25 @@ class ChatService:
             return None
 
     def get_response(self, user_message: str) -> str:
-        msg = user_message.lower().strip()
+        if not client:
+            return "Please configure your GEMINI_API_KEY in the backend/.env file to use the AI chatbot."
+            
+        stats = self.get_db_stats()
+        stats_context = ""
+        if stats:
+            stats_context = f"\n\nCurrent Database Statistics:\n- Total Scans Processed: {stats['total']}\n- Gliomas Detected: {stats['glioma']}\n- Meningiomas Detected: {stats['meningioma']}\n- Pituitary Tumors Detected: {stats['pituitary']}\nUse these statistics if the user asks about the dashboard's history or how many tumors have been found."
+
+        full_prompt = f"{self.system_prompt}{stats_context}\n\nUser Message: {user_message}\n\nAI Response:"
         
-        # 1. Greetings
-        if msg in ["hi", "hello", "hey", "greetings"]:
-            return "Hello! I'm here to help you navigate the NeuroDetect dashboard. You can ask me about how to use the system or your scan history."
-
-        # 2. System Purpose & Usage
-        if "what" in msg and ("system" in msg or "about" in msg or "this" in msg):
-            return "This system identifies brain tumors (Glioma, Meningioma, Pituitary) from MRI scans using AI. You can upload an image on the left to start."
-        
-        if "how" in msg and ("use" in msg or "do" in msg or "upload" in msg):
-            return "Usage: 1. Drag an MRI image to the box on the left. 2. Click 'Run Diagnostics'. 3. View results in the pop-up modal."
-
-        # 3. Database Stats (Concise)
-        if any(k in msg for k in ["how many", "count", "stats", "history", "total"]):
-            stats = self.get_db_stats()
-            if stats:
-                if "meningioma" in msg: return f"Detected {stats['meningioma']} Meningiomas so far."
-                if "glioma" in msg: return f"Records show {stats['glioma']} Gliomas."
-                if "pituitary" in msg: return f"Total of {stats['pituitary']} Pituitary tumors."
-                return f"Total scans: {stats['total']}. Total detections: {stats['glioma'] + stats['meningioma'] + stats['pituitary']}."
-            return "I couldn't reach the scan history database right now."
-
-        # 4. Troubleshooting
-        if "error" in msg or "problem" in msg or "not working" in msg or "help" in msg:
-            return "Troubleshooting: Make sure you are uploading a valid image file. If the scan won't start, please refresh the page or ensure the backend server is running."
-
-        # 5. Conversational Fillers
-        if msg in ["ok", "okay", "cool", "thanks", "nice", "got it"]:
-            return "You're welcome! Let me know if you need more help with the dashboard."
-
-        # 6. Fallback
-        return "I'm here for basic dashboard help and scan stats. For medical advice, please consult a radiologist."
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=full_prompt
+            )
+            return response.text
+        except Exception as e:
+            print(f"Gemini API Error: {e}")
+            return "I'm having trouble connecting to my AI brain right now. Please try again later."
 
 # Singleton instance
 chat_engine = ChatService()

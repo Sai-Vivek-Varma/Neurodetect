@@ -1,10 +1,8 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 import time
-import json
 from backend.model import predict_image
 from backend.database import get_db
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -100,4 +98,4 @@ async def clear_history():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
